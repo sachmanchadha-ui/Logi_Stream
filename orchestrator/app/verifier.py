@@ -35,6 +35,14 @@ EMPTY_CONTAINER_ASSIGN_RE = re.compile(r"\w+\s*=\s*(\{\}|\[\]|dict\(|set\()")
 IN_RANGE_RE = re.compile(r"in range\(")
 DOT_GET_RE = re.compile(r"\.get\(")
 
+# Approved addition to section 6.4 (human, 2026-09-21). The specified regex above
+# requires a trailing colon, so a bare `return [i, j]` or `import json` on its own
+# line slipped through. These two patterns are deliberately narrow: they require a
+# bracket/paren directly after `return`, and a bare `import <name>` on a line of its
+# own, so ordinary prose like "Return the indices, not the values." is untouched.
+BARE_RETURN_RE = re.compile(r"^\s*return\s*[\[\(]", re.MULTILINE)
+BARE_IMPORT_RE = re.compile(r"^\s*import\s+\w+\s*$", re.MULTILINE)
+
 
 @dataclass
 class VerificationResult:
@@ -103,7 +111,7 @@ def _longest_code_run(text: str) -> int:
                 longest = max(longest, run)
             continue
 
-        if _looks_like_code_line(line):
+        if _looks_like_code_line(line) or BARE_RETURN_RE.match(line) or BARE_IMPORT_RE.match(line):
             run += 1
             longest = max(longest, run)
         else:
@@ -147,6 +155,12 @@ def verify_logic_draft(draft: str, rubric: dict[str, Any]) -> VerificationResult
 
     if CODE_LINE_RE.search(text):
         _reject(rejections, "draft contains a code-like statement line")
+
+    if BARE_RETURN_RE.search(text):
+        _reject(rejections, "draft contains a bare 'return [' or 'return ('")
+
+    if BARE_IMPORT_RE.search(text):
+        _reject(rejections, "draft contains a bare import statement")
 
     if EMPTY_CONTAINER_ASSIGN_RE.search(text):
         _reject(rejections, "draft assigns an empty container (gives away the data structure)")

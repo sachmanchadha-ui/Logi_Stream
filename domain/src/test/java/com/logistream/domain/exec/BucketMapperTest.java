@@ -10,7 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.logistream.domain.exec.BucketMapper.Scored;
-import com.logistream.domain.judge0.Judge0Client.Result;
+import com.logistream.domain.exec.Sandbox.Result;
 
 /**
  * The section 8 bucket table, exercised without spending Judge0 quota.

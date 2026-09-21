@@ -8,10 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.logistream.domain.exec.BucketMapper.Scored;
-import com.logistream.domain.judge0.Judge0Client;
-import com.logistream.domain.judge0.Judge0Client.BatchOutcome;
-import com.logistream.domain.judge0.Judge0Client.Result;
-import com.logistream.domain.judge0.Judge0Client.Submission;
+import com.logistream.domain.exec.Sandbox.BatchOutcome;
+import com.logistream.domain.exec.Sandbox.Result;
+import com.logistream.domain.exec.Sandbox.Submission;
 import com.logistream.domain.model.Models.ExecuteResponse;
 import com.logistream.domain.model.Models.ProblemRow;
 import com.logistream.domain.model.Models.TestResult;
@@ -32,11 +31,12 @@ public class ExecutionService {
     private static final Logger log = LoggerFactory.getLogger(ExecutionService.class);
 
     private final ProblemRepository repo;
-    private final Judge0Client judge0;
+    private final Sandbox sandbox;
 
-    public ExecutionService(ProblemRepository repo, Judge0Client judge0) {
+    public ExecutionService(ProblemRepository repo, Sandbox sandbox) {
         this.repo = repo;
-        this.judge0 = judge0;
+        this.sandbox = sandbox;
+        log.info("execution sandbox: {} (available={})", sandbox.name(), sandbox.available());
     }
 
     public ExecuteResponse execute(ProblemRow problem, String studentSource) {
@@ -58,26 +58,26 @@ public class ExecutionService {
 
         BatchOutcome outcome;
         try {
-            outcome = judge0.runBatch(submissions);
+            outcome = sandbox.runBatch(submissions);
             totalRequests += outcome.requestsUsed();
 
             if (needsInfraRetry(outcome)) {
-                log.warn("judge0 returned an internal error (13/14) - retrying the batch once");
+                log.warn("sandbox returned an internal error (13/14) - retrying the batch once");
                 infraRetryUsed = true;
-                outcome = judge0.runBatch(submissions);
+                outcome = sandbox.runBatch(submissions);
                 totalRequests += outcome.requestsUsed();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return infraError(tests, totalRequests, infraRetryUsed, "interrupted");
         } catch (Exception e) {
-            log.error("judge0 call failed: {}", e.toString());
+            log.error("sandbox call failed: {}", e.toString());
             return infraError(tests, totalRequests, infraRetryUsed, e.toString());
         }
 
         List<Result> results = outcome.results();
         if (results.size() != tests.size()) {
-            log.error("judge0 returned {} results for {} tests", results.size(), tests.size());
+            log.error("sandbox returned {} results for {} tests", results.size(), tests.size());
             return infraError(tests, totalRequests, infraRetryUsed, "result count mismatch");
         }
 
@@ -103,7 +103,7 @@ public class ExecutionService {
         String bucket = BucketMapper.bucketOf(scored, outcome.timedOut());
         int passed = (int) testResults.stream().filter(TestResult::passed).count();
 
-        log.info("execute problem={} bucket={} passed={}/{} judge0_requests={} infra_retry={}",
+        log.info("execute problem={} bucket={} passed={}/{} requests={} infra_retry={}",
                 problem.id(), bucket, passed, tests.size(), totalRequests, infraRetryUsed);
 
         return new ExecuteResponse(bucket, passed, tests.size(), infraRetryUsed, testResults);
@@ -115,7 +115,7 @@ public class ExecutionService {
 
     /** A sandbox failure is not the student's fault; the attempt must not count. */
     private ExecuteResponse infraError(List<TestRow> tests, int requests, boolean retryUsed, String why) {
-        log.warn("execute -> INFRA_ERROR ({}), judge0_requests={}", why, requests);
+        log.warn("execute -> INFRA_ERROR ({}), requests={}", why, requests);
         List<TestResult> results = tests.stream()
                 .map(t -> new TestResult(t.idx(), t.label(), t.isPublic(),
                         null, "Infrastructure error", false, null,

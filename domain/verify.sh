@@ -5,9 +5,10 @@
 # Starts the service if it is not already up, runs the checks, and stops it
 # again only if it started it.
 #
-# COSTS JUDGE0 QUOTA: the five execution checks are one batch submit plus polls
-# each, roughly 15-25 billed requests per full run. Without JUDGE0_RAPIDAPI_KEY
-# those five are SKIPPED (not faked) and the script says so.
+# With the default EXECUTOR_MODE=LOCAL this costs nothing and needs no network:
+# the five execution checks run real python subprocesses on this host. Set
+# EXECUTOR_MODE=JUDGE0 to exercise the hosted sandbox instead, which does cost
+# quota; without a key those five checks are SKIPPED (not faked).
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -143,11 +144,12 @@ fi
 # ------------------------------------------------------------ 3. execution
 
 echo
-echo "[execution via Judge0]"
+echo "[execution: EXECUTOR_MODE=${EXECUTOR_MODE:-LOCAL}]"
 
-if [ -z "${JUDGE0_RAPIDAPI_KEY:-}" ]; then
-  echo "  JUDGE0_RAPIDAPI_KEY is not set - the five execution checks cannot run."
-  echo "  They are SKIPPED, not faked. Set the key in .env and re-run."
+EXECUTOR_MODE="${EXECUTOR_MODE:-LOCAL}"
+if [ "$EXECUTOR_MODE" = "JUDGE0" ] && [ -z "${JUDGE0_RAPIDAPI_KEY:-}" ]; then
+  echo "  EXECUTOR_MODE=JUDGE0 but JUDGE0_RAPIDAPI_KEY is not set."
+  echo "  The five execution checks are SKIPPED, not faked."
   skipd "correct solution        -> ACCEPTED 5/5"
   skipd "nested loop             -> TLE"
   skipd "missing colon           -> COMPILE_ERROR"
@@ -206,9 +208,10 @@ PYEOF
   run_case "returns values"    demo/fixtures/code_returns_values.py WRONG_ANSWER
 
   echo
-  echo "  Judge0 requests consumed by this run:"
-  grep -c 'judge0 request #' "$LOG" 2>/dev/null | sed 's/^/    total requests logged: /' || true
-  grep -o 'judge0_requests=[0-9]*' "$LOG" 2>/dev/null | tail -5 | sed 's/^/    /' || true
+  echo "  sandbox in use:"
+  grep -o 'execution sandbox: .*' "$LOG" 2>/dev/null | tail -1 | sed 's/^/    /' || true
+  echo "  billed upstream requests per run (0 means nothing metered was called):"
+  grep -o 'requests=[0-9]*' "$LOG" 2>/dev/null | tail -5 | sed 's/^/    /' || true
 fi
 
 echo

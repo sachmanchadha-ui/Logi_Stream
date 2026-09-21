@@ -1,0 +1,83 @@
+# LiteLLM proxy configuration for LogiStream.
+#
+# Why this exists (and why it is not just for the slide):
+#
+#   1. INTERNAL NAMES. The orchestrator asks for "logistream-evaluator" and
+#      "logistream-tutor". It never names a vendor or a model. Swapping provider
+#      is a change to this file and nothing else -- which is exactly the seam
+#      CLAUDE.md section 3 promised when it deferred LiteLLM.
+#
+#   2. FAILOVER. We are on OpenRouter's free tier, which throws 429 constantly
+#      under contention -- measured during the D1-T4 model bake-off. A 429 during
+#      the Thursday demo is unrecoverable by hand, so each internal name has a
+#      backup model and LiteLLM fails over automatically.
+#
+# Model choice is evidence-based, not a guess. From
+# `uv run python orchestrator/scripts/model_bakeoff.py` on 2026-09-21, scored
+# against the real F1/F3/F3b/F6 fixtures:
+#
+#   qwen/qwen3.8-27b:free                     4/4 verdicts, 4/4 valid JSON, ~18s
+#   nvidia/nemotron-3-super-120b-a12b:free    3/4 verdicts, 3/4 valid JSON, ~8s
+#   z-ai/glm-5.2:free                         rate-limited out
+#   google/gemma-4-31b-it:free                rate-limited out
+#
+# Note the slug named in the original .env, google/gemini-2.0-flash-exp:free,
+# no longer exists on OpenRouter at all (CLAUDE.md trap 12, exactly as warned).
+
+model_list:
+  # ---- evaluator: judges the student's Hinglish logic, must hold a JSON contract
+  - model_name: logistream-evaluator
+    litellm_params:
+      model: openrouter/qwen/qwen3.8-27b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+      temperature: 0
+    model_info:
+      mode: chat
+      notes: "primary - 4/4 on the fixture bake-off"
+
+  - model_name: logistream-evaluator-backup
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+      temperature: 0
+    model_info:
+      mode: chat
+      notes: "failover - faster but weaker JSON adherence"
+
+  # ---- tutor: writes the Socratic turn; every output is verified downstream
+  - model_name: logistream-tutor
+    litellm_params:
+      model: openrouter/qwen/qwen3.8-27b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      mode: chat
+
+  - model_name: logistream-tutor-backup
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      mode: chat
+
+router_settings:
+  # free-tier 429s are bursty, so retry before giving up on a deployment
+  num_retries: 2
+  retry_after: 5
+  timeout: 120
+  allowed_fails: 3
+  cooldown_time: 30
+  fallbacks:
+    - logistream-evaluator: ["logistream-evaluator-backup"]
+    - logistream-tutor: ["logistream-tutor-backup"]
+
+litellm_settings:
+  drop_params: true          # free models reject params they do not implement
+  request_timeout: 120
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

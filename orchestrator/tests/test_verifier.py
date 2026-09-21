@@ -100,21 +100,37 @@ def test_code_like_lines_are_rejected(rubric, line):
     assert not result.ok, f"{line!r} slipped through"
 
 
-@pytest.mark.parametrize("line", ["return [i, j]", "import json"])
-def test_known_gap_colonless_code_lines_are_not_caught(rubric, line):
-    """Documents a real gap in the section 6.4 rule, deliberately left in place.
+@pytest.mark.parametrize("line", ["return [i, j]", "return (i, j)", "import json", "import sys"])
+def test_colonless_code_lines_are_caught(rubric, line):
+    """The section 6.4 gap, closed with human approval on 2026-09-21.
 
-    The specified regex is ``^\\s*(def|for|while|if|elif|return|import|class)\\b.*:\\s*$``
-    -- it requires a trailing colon, so a bare ``return [i, j]`` or ``import json``
-    on its own line is not matched. In practice such a line almost always arrives
-    inside a code fence, which *is* caught, so the exposure is small.
-
-    Tightening the rule means changing section 6.4, which needs human approval
-    (CLAUDE.md section 1.4). This test pins the current behaviour so the gap is
-    visible rather than forgotten; flip it if the rule is tightened.
+    The specified regex requires a trailing colon, so a bare ``return [i, j]`` or
+    ``import json`` used to slip through. Two narrow patterns now close it:
+    ``^\\s*return\\s*[\\[\\(]`` and ``^\\s*import\\s+\\w+\\s*$``.
     """
     result = verify_logic_draft(f"Consider this:\n{line}\nWhat happens?", rubric)
-    assert result.ok, "section 6.4 was tightened - update this test and PROGRESS.md"
+    assert not result.ok, f"{line!r} slipped through"
+
+
+@pytest.mark.parametrize(
+    "prose",
+    [
+        "Return the indices, not the values.",
+        "What should your function return when it finds the pair?",
+        "Tumhe return karna hai positions, numbers nahi.",
+        "Think about what is important to remember as you go.",
+        "The order you return them in does not matter.",
+    ],
+)
+def test_new_patterns_do_not_fire_on_prose(rubric, prose):
+    """The whole point of making the two new patterns narrow.
+
+    A verifier that rejects ordinary tutoring language burns regenerations and
+    pushes the tutor onto its canned fallback mid-demo, which is worse than the
+    gap it closes.
+    """
+    result = verify_logic_draft(prose, rubric)
+    assert result.ok, f"false positive on prose: {result.reasons}"
 
 
 def test_the_same_colonless_lines_are_caught_inside_a_fence(rubric):

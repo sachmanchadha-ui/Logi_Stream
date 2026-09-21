@@ -18,5 +18,31 @@ services:
       timeout: 5s
       retries: 20
 
+  # LiteLLM proxy: the orchestrator's only LLM endpoint.
+  #
+  # It gives us internal model names decoupled from the provider, and automatic
+  # failover between two free models -- which matters because OpenRouter's free
+  # tier throws 429 under contention and a rate limit on stage is unrecoverable.
+  # See litellm_config.yaml for the routing and the bake-off that chose the models.
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: logistream-litellm
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set - source .env first}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-logistream-dev}
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+    healthcheck:
+      # /health/liveliness needs no auth, unlike /health
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=3).status==200 else 1)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
 volumes:
   logistream-pgdata:

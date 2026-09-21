@@ -15,12 +15,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.logistream.domain.exec.Sandbox;
 
 /**
  * Hosted Judge0 CE client (CLAUDE.md section 8, judge0/HOSTED.md).
@@ -35,7 +37,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * ExecutionService, where it is visible.
  */
 @Component
-public class Judge0Client {
+@ConditionalOnProperty(name = "logistream.executor.mode", havingValue = "JUDGE0")
+public class Judge0Client implements Sandbox {
 
     private static final Logger log = LoggerFactory.getLogger(Judge0Client.class);
 
@@ -58,39 +61,14 @@ public class Judge0Client {
                 .build();
     }
 
-    /** One submission as we send it. */
-    public record Submission(
-            String sourceCode,
-            String stdin,
-            BigDecimal cpuTimeLimit,
-            BigDecimal wallTimeLimit,
-            int memoryLimitKb) {
+    @Override
+    public String name() {
+        return "JUDGE0_HOSTED(" + props.getUrl() + ")";
     }
 
-    /** One submission as it comes back, already base64-decoded. */
-    public record Result(
-            String token,
-            int statusId,
-            String statusDescription,
-            String stdout,
-            String stderr,
-            String compileOutput,
-            String time) {
-
-        public boolean pending() {
-            return statusId == STATUS_IN_QUEUE || statusId == STATUS_PROCESSING;
-        }
-
-        /** stderr and compile_output together -- callers almost always want both. */
-        public String combinedError() {
-            String a = stderr == null ? "" : stderr;
-            String b = compileOutput == null ? "" : compileOutput;
-            return (a + (a.isEmpty() || b.isEmpty() ? "" : "\n") + b).trim();
-        }
-    }
-
-    /** What one batch run cost and produced. */
-    public record BatchOutcome(List<Result> results, int requestsUsed, boolean timedOut) {
+    @Override
+    public boolean available() {
+        return configured();
     }
 
     public boolean configured() {
@@ -103,6 +81,7 @@ public class Judge0Client {
      *
      * @return the results plus the number of Judge0 requests consumed
      */
+    @Override
     public BatchOutcome runBatch(List<Submission> submissions) throws IOException, InterruptedException {
         AtomicInteger requests = new AtomicInteger();
 

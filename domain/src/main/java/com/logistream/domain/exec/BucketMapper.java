@@ -2,7 +2,7 @@ package com.logistream.domain.exec;
 
 import java.util.List;
 
-import com.logistream.domain.judge0.Judge0Client.Result;
+import com.logistream.domain.exec.Sandbox.Result;
 
 /**
  * Maps a batch of Judge0 results to one bucket (CLAUDE.md section 8).
