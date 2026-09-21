@@ -1,0 +1,1 @@
+Main har number ke saath uska original index jod ke list ko value ke hisaab se sort karunga. Phir ek pointer shuru mein aur ek end mein. Sum chhota ho toh left aage, bada ho toh right peeche. Jab sum target ke barabar ho, dono ke original index return kar dunga.

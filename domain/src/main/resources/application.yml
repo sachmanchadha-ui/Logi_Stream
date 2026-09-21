@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: logistream-domain
+  datasource:
+    # Java does not read .env; the start scripts do `set -a; source .env; set +a`.
+    url: ${DATABASE_URL_JDBC:jdbc:postgresql://localhost:5432/logistream}
+    username: ${POSTGRES_USER:logistream}
+    password: ${POSTGRES_PASSWORD:logistream}
+    hikari:
+      maximum-pool-size: 5
+
+logistream:
+  internal-token: ${INTERNAL_TOKEN:dev-internal-token-change-me}
+  judge0:
+    url: ${JUDGE0_URL:https://judge0-ce.p.rapidapi.com}
+    rapidapi-key: ${JUDGE0_RAPIDAPI_KEY:}
+    rapidapi-host: ${JUDGE0_RAPIDAPI_HOST:judge0-ce.p.rapidapi.com}
+    python-language-id: ${JUDGE0_PYTHON_LANGUAGE_ID:71}
+    poll-interval-ms: ${JUDGE0_POLL_INTERVAL_MS:1000}
+    max-polls: ${JUDGE0_MAX_POLLS:15}
+
+logging:
+  level:
+    com.logistream: INFO
+  pattern:
+    # every log line carries the trace id (CLAUDE.md section 1.7)
+    # timestamps are UTC on purpose - see the comment in DomainApplication
+    console: "%d{HH:mm:ss.SSS'Z'} %-5level [trace=%X{traceId:-none}] %logger{25} - %msg%n"

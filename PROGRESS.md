@@ -26,7 +26,7 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | D1-T0 Toolchain and skeleton | ✅ DONE | Layout per §4, `.gitattributes` (LF), `.gitignore`, `.env.example`, `git init`. Toolchain bootstrapped portably (see decision below). Verify: all version commands succeed; `git check-attr eol -- scripts/judge0_smoke.sh` → `lf`. |
 | D1-T1 Hosted Judge0 setup | ⏸ BLOCKED on key | `judge0/HOSTED.md` and `scripts/judge0_smoke.sh` written; script syntax-checked and exits 2 cleanly with no key. **Cannot run the smoke test until `JUDGE0_RAPIDAPI_KEY` is in `.env`** — STOPPED per D1-T1. |
 | D1-T2 Postgres, schema, seed | ✅ DONE | `docker-compose.yml` (postgres:16, named volume, `db/init` mounted), `01_schema.sql` (§7.1), `generate_two_sum.py` → `02_seed.sql` (155 KB). Verify: `bash db/verify.sh` → **21/21 PASS**. |
-| D1-T3 Java domain service | ⬜ not started | Unblocked (Maven + JDK 21 present). Its Judge0 verify steps need `JUDGE0_RAPIDAPI_KEY`. |
+| D1-T3 Java domain service | 🟡 BUILT, partly verified | Spring Boot 3.5.16 on Java 21, JdbcTemplate, internal-token filter, trace-id filter, Judge0 client + bucket mapper. Verify: `bash domain/verify.sh` → **7 passed, 0 failed, 5 skipped**. The 5 skipped are the execution checks and need `JUDGE0_RAPIDAPI_KEY`. Unit tests: **13/13** on the §8 bucket table. |
 | D1-T4 Python orchestrator core | ⬜ not started | Needs `OPENROUTER_API_KEY` + a verified paid model slug |
 | 🚦 Day 1 gate | ⬜ | |
 | D2-T1 Code phase in graph | ⬜ | |
@@ -55,6 +55,8 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 - **2026-09-21 · Orchestrator Python = 3.11.15 (uv-managed), not the PATH 3.14.7.** CLAUDE.md says 3.11+; 3.11 is what the LangGraph / psycopg / pydantic wheel ecosystem is proven against, and a missing wheel on 3.14 would burn build time we do not have.
 
 - **2026-09-21 · Toolchain is repo-pinned, not machine-installed.** `scripts/bootstrap_toolchain.sh` downloads Temurin 21 and Maven 3.9.16 into `tools/` and installs rustup per-user. `scripts/env.sh` puts them on PATH and sets `JAVA_HOME`. Every start/verify script sources it. Rationale: no admin rights needed, and the Thursday demo cannot be broken by a machine-wide JDK change.
+- **2026-09-21 · The Java service runs in UTC.** The Postgres JDBC driver puts the JVM's default zone id in the connection startup packet. On this host that id is the legacy alias `Asia/Calcutta`, which `postgres:16`'s tzdata does not carry (it has only `Asia/Kolkata`), so **every** connection failed with `FATAL: invalid value for parameter "TimeZone"` before any query ran. `DomainApplication` pins the default zone to UTC in a static block. All columns are `timestamptz`, the service never formats local time, and this removes the host locale from the demo. Java log timestamps carry a `Z` suffix so nobody misreads them during rehearsal.
+- **2026-09-21 · Judge0 bucket mapping is a pure function.** `BucketMapper` is static and takes already-scored results, so all 13 §8 rules — including the Python-`SyntaxError`-as-status-11 reclassification — are unit-tested without spending a single Judge0 request.
 - **2026-09-21 · Test 5 uniqueness proven two ways.** The generator asserts `count_pairs == 1` in Python; `db/verify.sh` independently re-derives it in SQL with a self-join over all ~200M pairs. Measured locally: single-pass 0.003 s, nested loop ~7 s against `cpu_time_limit=2` — a comfortable TLE margin for D1-T3.
 
 ## Deviations from CLAUDE.md

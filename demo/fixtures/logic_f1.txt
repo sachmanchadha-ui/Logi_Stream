@@ -1,0 +1,1 @@
+Main har number ke liye baaki saare numbers check karunga, do loops laga ke. Jab dono ka sum target ke barabar ho jaye toh unke index return kar dunga.
