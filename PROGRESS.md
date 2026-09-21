@@ -43,7 +43,7 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 ## Findings for the human
 
 - **§6.4's code-line regex has a gap.** The specified pattern
-  `^\s*(def|for|while|if|elif|return|import|class).*:\s*$` requires a trailing colon, so a bare
+  `^\s*(def|for|while|if|elif|return|import|class)\b.*:\s*$` requires a trailing colon, so a bare
   `return [i, j]` or `import json` on its own line is **not** rejected in the logic phase. In practice such a
   line almost always arrives inside a code fence, which *is* caught, so exposure is small — and tightening the
   rule risks false positives on ordinary prose ("Return the indices, not the values."). Tightening it changes
