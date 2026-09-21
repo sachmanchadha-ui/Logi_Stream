@@ -16,6 +16,9 @@ TOOLS="$ROOT/tools"
 MAVEN_VERSION="3.9.16"
 mkdir -p "$TOOLS/dl"
 
+PY_BIN=python
+command -v python >/dev/null 2>&1 || PY_BIN=python3
+
 unzip_to() {  # unzip_to <zipfile> <destdir>
   local zip="$1" dest="$2"
   mkdir -p "$dest"
@@ -57,6 +60,37 @@ else
   rm -rf "$TOOLS/maven.tmp"
   chmod +x "$TOOLS/maven/bin/mvn"
   echo "[maven] installed -> tools/maven"
+fi
+
+# ---------- MinGW-w64 binutils (for the rust gnu toolchain) ----------
+# This machine has no Visual Studio C++ toolset, so rust cannot use the msvc
+# target: it shells out to link.exe, which on Git Bash resolves to coreutils'
+# link.exe and fails. The gnu toolchain works instead, but rustup only ships
+# dlltool/ld/gcc -- not the assembler dlltool itself invokes -- so linking dies
+# with "dlltool.exe: CreateProcess". A portable binutils fixes it with no admin
+# rights and no multi-GB Visual Studio install.
+if [ -x "$TOOLS/mingw64/bin/as.exe" ]; then
+  echo "[mingw] already installed"
+else
+  echo "[mingw] resolving the latest winlibs ucrt build..."
+  MINGW_URL=$(curl -sS --max-time 120     "https://api.github.com/repos/brechtsanders/winlibs_mingw/releases/latest"     | "$PY_BIN" -c "
+import json,sys
+r=json.load(sys.stdin)
+a=[x for x in r.get('assets',[]) if x['name'].endswith('.zip')
+   and 'x86_64' in x['name'] and 'ucrt' in x['name'].lower() and 'posix' in x['name']]
+print(sorted(a, key=lambda x: x['size'])[0]['browser_download_url'] if a else '')
+")
+  [ -n "$MINGW_URL" ] || { echo "[mingw] ERROR: could not resolve a download url"; exit 1; }
+  echo "[mingw] downloading (~270 MB) $MINGW_URL"
+  curl -sSL --max-time 2400 -o "$TOOLS/dl/mingw.zip" "$MINGW_URL"
+  sz=$(stat -c%s "$TOOLS/dl/mingw.zip")
+  [ "$sz" -gt 100000000 ] || { echo "[mingw] ERROR: download is only $sz bytes"; exit 1; }
+  rm -rf "$TOOLS/mingw.tmp" && mkdir -p "$TOOLS/mingw.tmp"
+  unzip_to "$TOOLS/dl/mingw.zip" "$TOOLS/mingw.tmp"
+  inner=$(find "$TOOLS/mingw.tmp" -maxdepth 2 -mindepth 1 -type d -name "mingw64" | head -1)
+  [ -n "$inner" ] || inner=$(find "$TOOLS/mingw.tmp" -maxdepth 1 -mindepth 1 -type d | head -1)
+  rm -rf "$TOOLS/mingw64" && mv "$inner" "$TOOLS/mingw64" && rm -rf "$TOOLS/mingw.tmp"
+  echo "[mingw] installed -> tools/mingw64"
 fi
 
 # ---------- Rust (per-user rustup) ----------

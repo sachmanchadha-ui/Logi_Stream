@@ -34,15 +34,17 @@ unset _ls_cargo
 PATH="$(printf '%s' "$PATH" | tr ':' '
 ' | grep -v -i '^/g/MINGW/bin$' | paste -sd ':' -)"
 
-# rustc looks up dlltool.exe on PATH and does NOT fall back to the copy rustup
-# ships, so the gnu toolchain's self-contained bin directory has to be visible
-# or every windows-sys crate fails with "error calling dlltool".
-_ls_selfcontained="${CARGO_HOME:-$HOME/.cargo}"
-_ls_selfcontained="$(dirname "$_ls_selfcontained")/.rustup/toolchains/stable-x86_64-pc-windows-gnu/lib/rustlib/x86_64-pc-windows-gnu/bin/self-contained"
-if [ -d "$_ls_selfcontained" ]; then
-  PATH="$_ls_selfcontained:$PATH"
+# rustc looks up dlltool.exe (and dlltool in turn needs an assembler) on PATH,
+# and does NOT fall back to what rustup ships. Prefer the portable MinGW-w64 in
+# tools/, which is a complete binutils; fall back to rustup's partial
+# self-contained set if the bootstrap has not run yet.
+if [ -d "$_ls_root/tools/mingw64/bin" ]; then
+  PATH="$_ls_root/tools/mingw64/bin:$PATH"
+else
+  _ls_selfcontained="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-gnu/lib/rustlib/x86_64-pc-windows-gnu/bin/self-contained"
+  [ -d "$_ls_selfcontained" ] && PATH="$_ls_selfcontained:$PATH"
+  unset _ls_selfcontained
 fi
-unset _ls_selfcontained
 
 export PATH
 unset _ls_root

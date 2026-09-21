@@ -31,7 +31,7 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | 🚦 Day 1 gate | ✅ **REACHED** | Reported to the human. |
 | D2-T1 Code phase in graph | ✅ DONE | `execute_code`, `code_tutor`, `verify_code`, `finish`, `redact.py`, `view.py`; `code:`/`--flow`/`--tle` in the harness. Verify: `--flow` → full F1→F5 pass; `--tle` → F4b pass; `pytest` → **62/62**. |
 | D2-T2 PostgresSaver + FastAPI | ✅ DONE | `checkpointer.py` (trap 4 settings), `main.py` (§5.3 endpoints, 401/404/409/422), `tracing.py`. Verify: `bash orchestrator/verify_api.sh` → **22 passed, 0 failed**, including the kill-and-restart persistence proof. `pytest` → **79/79**. |
-| D2-T3 Rust gateway | ⬜ | Unblocked (cargo 1.98.1 + MSVC linker present) |
+| D2-T3 Rust gateway | ✅ DONE | Axum 0.8, mocked auth, sha256 thread derivation, 120 s reqwest timeout, CORS, trace propagation. Verify: `bash gateway/verify.sh` → **20 passed, 0 failed**; `cargo test` → **6/6**. Needed a three-layer Windows toolchain fix — see below. |
 | D2-T4 Next.js UI | ⬜ | |
 | 🚦 Day 2 gate | ⬜ | |
 | D3-T1 Stretch | ⬜ | LLM judge; containerising app services (LiteLLM already containerised) |
@@ -112,6 +112,21 @@ scores candidates against the real F1/F3/F3b/F6 fixtures:
 | `nvidia/nemotron-3-super-120b-a12b:free` | 3/4 | 3/4 | 7.6 s | fallback |
 | `z-ai/glm-5.2:free` | 1/4 | 1/4 | 17.7 s | rate-limited out |
 | `google/gemma-4-31b-it:free` | 0/4 | 0/4 | 16.6 s | rate-limited out |
+
+## D2-T3 toolchain: three layers of Windows linker trouble
+
+The gateway compiled on the first try but could not **link**. Three separate causes, none of
+them Rust's fault, all fixed without admin rights:
+
+| # | Symptom | Cause | Fix |
+|---|---|---|---|
+| 1 | `link: extra operand ...` | No Visual Studio C++ toolset exists on this machine. Rust's msvc target shells out to `link.exe`, which on Git Bash resolves to **coreutils' `/usr/bin/link.exe`** | Switched to `x86_64-pc-windows-gnu`, pinned in `gateway/rust-toolchain.toml` |
+| 2 | `dlltool: Invalid bfd target` | An ancient MinGW at `G:\MINGWin` (ships `aclocal-1.4`) sits on the system PATH and shadowed rustup's tools | `scripts/env.sh` filters `/g/MINGW/bin` out of PATH **for this repo's shells only**; the system PATH is untouched |
+| 3 | `dlltool.exe: CreateProcess` | rustup's self-contained set has `dlltool`/`ld`/`gcc` but **no assembler**, which `dlltool` itself invokes | Portable MinGW-w64 (winlibs UCRT) into `tools/mingw64`, added to `scripts/bootstrap_toolchain.sh` |
+
+**Correction to the Day 1 environment note.** Day 1 recorded "MSVC linker present (Visual Studio 18)".
+That was wrong: `command -v link.exe` matched Git Bash's coreutils `link.exe`. There is no MSVC
+C++ toolset installed. The table above is what is actually true.
 
 ## Findings for the human
 

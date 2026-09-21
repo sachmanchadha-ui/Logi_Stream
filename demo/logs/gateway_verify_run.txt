@@ -1,0 +1,45 @@
+=== D2-T3 verify: Rust gateway ===
+
+  upstream ok: domain (java) on :8080
+  upstream ok: orchestrator (python) on :8001
+
+  starting the gateway (log: demo/logs/gateway-verify.log)
+  gateway is up
+
+[routing]
+  PASS  GET /health -> 200
+  PASS  GET /api/problems/two-sum -> 200 (proxied to java)
+  PASS    ...still carries no rubric or hidden tests
+
+[identity: the client must not be able to choose its thread]
+  PASS  start -> thread_id derived server-side (9ad3c3d8bbf4aaf6...)
+  PASS  thread_id == sha256(user_id + ':' + problem_id)
+  PASS  a "thread_id":"attacker" body field is ignored
+  PASS  an X-Thread-Id: attacker header is ignored
+  PASS  X-Demo-User: someone-else gets a different thread (55abf44a356bb6fc...)
+  PASS    ...and that session is empty
+
+[tracing]
+  PASS  X-Trace-Id is propagated and echoed
+  PASS  a request with no trace id gets one generated (c4209eae-6cd1-4847-8afd-604ca4b05d58)
+  checking the same id reached the downstream logs...
+  PASS  the same trace id appears in gateway AND java logs
+
+[error passthrough]
+  PASS  python's 409 is passed through, not flattened to 500
+  PASS  python's 422 is passed through
+  PASS  java's 404 is passed through
+
+[CORS]
+  PASS  preflight for a JSON POST is allowed
+  PASS  x-trace-id is exposed to the browser on real responses
+
+[end-to-end through port 8000 only]
+  PASS  F1 through the gateway -> FAIL in 27s (misconception=nested-loop)
+  PASS    ...and the view carries debug.trace_id
+  PASS  GET /api/sessions/two-sum resumes the same session
+
+=== D2-T3 VERIFY: 20 passed, 0 failed ===
+
+stopping the gateway we started (pid 28532)
+EXIT=0
