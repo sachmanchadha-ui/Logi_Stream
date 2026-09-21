@@ -24,7 +24,7 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | Task | Status | Notes |
 |---|---|---|
 | D1-T0 Toolchain and skeleton | ✅ DONE | Layout per §4, `.gitattributes` (LF), `.gitignore`, `.env.example`, `git init`. Toolchain bootstrapped portably (see decision below). Verify: all version commands succeed; `git check-attr eol -- scripts/judge0_smoke.sh` → `lf`. |
-| D1-T1 Hosted Judge0 setup | ⬜ not started | Needs `JUDGE0_RAPIDAPI_KEY` from the human in `.env` |
+| D1-T1 Hosted Judge0 setup | ⏸ BLOCKED on key | `judge0/HOSTED.md` and `scripts/judge0_smoke.sh` written; script syntax-checked and exits 2 cleanly with no key. **Cannot run the smoke test until `JUDGE0_RAPIDAPI_KEY` is in `.env`** — STOPPED per D1-T1. |
 | D1-T2 Postgres, schema, seed | ✅ DONE | `docker-compose.yml` (postgres:16, named volume, `db/init` mounted), `01_schema.sql` (§7.1), `generate_two_sum.py` → `02_seed.sql` (155 KB). Verify: `bash db/verify.sh` → **21/21 PASS**. |
 | D1-T3 Java domain service | ⬜ not started | Unblocked (Maven + JDK 21 present). Its Judge0 verify steps need `JUDGE0_RAPIDAPI_KEY`. |
 | D1-T4 Python orchestrator core | ⬜ not started | Needs `OPENROUTER_API_KEY` + a verified paid model slug |
