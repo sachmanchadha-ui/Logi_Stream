@@ -7,6 +7,7 @@
 Interactive commands:
     logic: <text>     submit an algorithm description
     chat:  <text>     ask the tutor something
+    code:  <path>     submit a python file (e.g. code: demo/fixtures/code_correct.py)
     state             dump the current state
     reset             start a fresh thread
     quit
@@ -26,6 +27,16 @@ import time
 import uuid
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+# Windows consoles hand python cp1252, which renders Hinglish smart quotes as
+# mojibake in a UTF-8 terminal and raises UnicodeEncodeError outright on
+# Devanagari -- i.e. a student typing actual Hindi script would crash the
+# harness. The data itself is always UTF-8; only this console is the problem.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):        # not a real tty, or already utf-8
+        pass
 
 from langgraph.types import Command  # noqa: E402
 
@@ -73,6 +84,22 @@ def show_turn(state: dict, elapsed: float, seen_messages: int) -> int:
     if state.get("fallback_used"):
         print(f"{YELLOW}  fallback  : canned reply used (regenerations exhausted){RESET}")
 
+    ex = state.get("last_execution")
+    if ex:
+        from app import redact
+        view = redact.strip_for_view(ex)
+        bucket = view["bucket"]
+        colour = GREEN if bucket == "ACCEPTED" else RED
+        print(f"  bucket    : {colour}{bucket}{RESET}   {view['passed']}/{view['total']} tests passed")
+        for t in view["tests"]:
+            mark = f"{GREEN}pass{RESET}" if t["passed"] else f"{RED}fail{RESET}"
+            vis = "public" if t["is_public"] else f"{DIM}hidden{RESET}"
+            extra = ""
+            if t["is_public"] and not t["passed"]:
+                extra = f"  expected={t.get('expected')!r} got={(t.get('stdout') or '').strip()!r}"
+            print(f"{DIM}    {t['index']}. {t['label']:<24}{RESET} [{mark}] {vis}"
+                  f" {t.get('status') or ''}{extra}")
+
     messages = state.get("messages") or []
     for m in messages[seen_messages:]:
         if m["role"] == "student":
@@ -88,7 +115,10 @@ def show_turn(state: dict, elapsed: float, seen_messages: int) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--problem", default="two-sum")
-    ap.add_argument("--fixtures", action="store_true", help="run the golden set and exit")
+    ap.add_argument("--fixtures", action="store_true", help="run the logic golden set and exit")
+    ap.add_argument("--flow", action="store_true",
+                    help="run the full section 10 demo flow F1->F5 in one thread (D2-T1 verify)")
+    ap.add_argument("--tle", action="store_true", help="run the F4b nested-loop TLE fixture")
     ap.add_argument("--verbose", "-v", action="store_true")
     args = ap.parse_args()
     setup_logging(args.verbose)
@@ -110,6 +140,10 @@ def main() -> int:
 
     if args.fixtures:
         return run_fixtures(args.problem)
+    if args.flow:
+        return run_flow(args.problem)
+    if args.tle:
+        return run_tle(args.problem)
     return interactive(args.problem)
 
 
@@ -157,9 +191,18 @@ def interactive(problem_id: str) -> int:
             continue
         etype, text = line.split(":", 1)
         etype, text = etype.strip(), text.strip()
-        if etype not in ("logic", "chat"):
+        if etype not in ("logic", "chat", "code"):
             print(f"{DIM}unknown command {etype!r}{RESET}")
             continue
+        if etype == "code":
+            path = pathlib.Path(text)
+            if not path.is_absolute():
+                path = ROOT / text
+            if not path.exists():
+                print(f"{RED}no such file: {path}{RESET}")
+                continue
+            text = path.read_text(encoding="utf-8")
+            print(f"{DIM}  submitting {path.name} ({len(text)} bytes){RESET}")
 
         try:
             state, elapsed = send(graph, cfg, etype, text)
@@ -265,6 +308,114 @@ def run_fixtures(problem_id: str) -> int:
         print(f"{RED}{failures} fixture(s) FAILED{RESET}")
     else:
         print(f"{GREEN}all fixtures passed{RESET}")
+    return 1 if failures else 0
+
+
+# --------------------------------------------------------------------------
+# full demo flow (D2-T1 verify)
+# --------------------------------------------------------------------------
+
+FLOW = [
+    ("F1", "logic", "logic_f1.txt",            {"verdict": "FAIL", "phase": "LOGIC"}),
+    ("F2", "chat",  "chat_f2.txt",             {"tutor_reply": True, "phase": "LOGIC"}),
+    ("F3", "logic", "logic_f3.txt",            {"verdict": "PASS", "phase": "CODE"}),
+    ("F4", "code",  "code_runtime_error.py",   {"bucket": "RUNTIME_ERROR", "phase": "CODE",
+                                                "tutor_reply": True}),
+    ("F5", "code",  "code_correct.py",         {"bucket": "ACCEPTED", "phase": "DONE",
+                                                "status": "SUCCESS"}),
+]
+
+
+def _check(state, expect, entrypoint="two_sum"):
+    """Returns a list of problems; empty means the step passed."""
+    problems = []
+    ev = state.get("last_eval") or {}
+    ex = state.get("last_execution") or {}
+
+    for field, want in expect.items():
+        if field == "tutor_reply":
+            if not any(m["role"] == "tutor" for m in (state.get("messages") or [])):
+                problems.append("no tutor reply")
+        elif field == "phase":
+            if state.get("phase") != want:
+                problems.append(f"phase={state.get('phase')} wanted {want}")
+        elif field == "status":
+            if state.get("status") != want:
+                problems.append(f"status={state.get('status')} wanted {want}")
+        elif field == "bucket":
+            if ex.get("bucket") != want:
+                problems.append(f"bucket={ex.get('bucket')} wanted {want}")
+        else:
+            if ev.get(field) != want:
+                problems.append(f"{field}={ev.get(field)!r} wanted {want!r}")
+
+    # no tutor turn may ever hand over the solution
+    for m in (state.get("messages") or []):
+        if m["role"] == "tutor" and f"def {entrypoint}" in m["text"]:
+            problems.append("tutor wrote the entrypoint function")
+    return problems
+
+
+def _load(fixture: str) -> str:
+    return (FIXTURES / fixture).read_text(encoding="utf-8")
+
+
+def _run_steps(problem_id, steps, title):
+    graph, cfg, thread_id = new_session(problem_id)
+    seen = 0
+    failures = 0
+    timings = []
+
+    print(f"\n{BOLD}{title}{RESET}  {DIM}thread {thread_id}{RESET}")
+
+    for cid, etype, fixture, expect in steps:
+        text = _load(fixture)
+        print(f"\n{BOLD}=== {cid}  ({etype}: {fixture}){RESET}")
+        preview = text.replace("\n", " ")[:110]
+        print(f"{DIM}  {preview}{'...' if len(text) > 110 else ''}{RESET}")
+
+        try:
+            state, elapsed = send(graph, cfg, etype, text)
+        except Exception as e:                   # noqa: BLE001
+            print(f"{RED}  ERROR: {type(e).__name__}: {e}{RESET}")
+            failures += 1
+            continue
+
+        seen = show_turn(state, elapsed, seen)
+        timings.append((cid, elapsed))
+
+        problems = _check(state, expect)
+        if problems:
+            failures += 1
+            print(f"{RED}  FAIL: {'; '.join(problems)}{RESET}")
+        else:
+            print(f"{GREEN}  OK{RESET}")
+
+    print(f"\n{BOLD}timings{RESET}")
+    for cid, t in timings:
+        print(f"  {cid:<5} {t:6.1f}s")
+    print(f"  {'total':<5} {sum(t for _, t in timings):6.1f}s")
+    return failures
+
+
+def run_flow(problem_id: str) -> int:
+    failures = _run_steps(problem_id, FLOW, "FULL DEMO FLOW (section 10: F1 -> F5)")
+    print()
+    if failures:
+        print(f"{RED}{failures} step(s) FAILED{RESET}")
+    else:
+        print(f"{GREEN}full flow passed: logic gate -> unlock -> runtime error -> success{RESET}")
+    return 1 if failures else 0
+
+
+def run_tle(problem_id: str) -> int:
+    steps = [
+        ("F3",  "logic", "logic_f3.txt", {"verdict": "PASS", "phase": "CODE"}),
+        ("F4b", "code",  "code_tle.py",  {"bucket": "TLE", "phase": "CODE", "tutor_reply": True}),
+    ]
+    failures = _run_steps(problem_id, steps, "TLE PATH (F4b)")
+    print()
+    print(f"{RED}FAILED{RESET}" if failures else f"{GREEN}TLE path passed{RESET}")
     return 1 if failures else 0
 
 
