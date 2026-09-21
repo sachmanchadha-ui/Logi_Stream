@@ -27,7 +27,7 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | D1-T1 Hosted Judge0 setup | ⏸ BLOCKED on key | `judge0/HOSTED.md` and `scripts/judge0_smoke.sh` written; script syntax-checked and exits 2 cleanly with no key. **Cannot run the smoke test until `JUDGE0_RAPIDAPI_KEY` is in `.env`** — STOPPED per D1-T1. |
 | D1-T2 Postgres, schema, seed | ✅ DONE | `docker-compose.yml` (postgres:16, named volume, `db/init` mounted), `01_schema.sql` (§7.1), `generate_two_sum.py` → `02_seed.sql` (155 KB). Verify: `bash db/verify.sh` → **21/21 PASS**. |
 | D1-T3 Java domain service | 🟡 BUILT, partly verified | Spring Boot 3.5.16 on Java 21, JdbcTemplate, internal-token filter, trace-id filter, Judge0 client + bucket mapper. Verify: `bash domain/verify.sh` → **7 passed, 0 failed, 5 skipped**. The 5 skipped are the execution checks and need `JUDGE0_RAPIDAPI_KEY`. Unit tests: **13/13** on the §8 bucket table. |
-| D1-T4 Python orchestrator core | ⬜ not started | Needs `OPENROUTER_API_KEY` + a verified paid model slug |
+| D1-T4 Python orchestrator core | 🟡 verifier done, rest blocked | uv venv on **Python 3.11.15**; langgraph 1.2.12, openai 3.16.2, fastapi 0.141.1, psycopg 3.3.6 pinned in `uv.lock`. `app/verifier.py` complete per §6.4 + fallbacks. Verify: `uv run pytest` → **42/42 PASS**. Remaining (llm.py, domain_client, state, nodes, graph, cli_harness) needs `OPENROUTER_API_KEY`. |
 | 🚦 Day 1 gate | ⬜ | |
 | D2-T1 Code phase in graph | ⬜ | |
 | D2-T2 PostgresSaver + FastAPI | ⬜ | |
@@ -39,6 +39,17 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | D3-T3 Cold start test | ⬜ | |
 | D3-T4 Pre-warm | ⬜ | |
 | D3-T5 Rehearsal support | ⬜ | |
+
+## Findings for the human
+
+- **§6.4's code-line regex has a gap.** The specified pattern
+  `^\s*(def|for|while|if|elif|return|import|class).*:\s*$` requires a trailing colon, so a bare
+  `return [i, j]` or `import json` on its own line is **not** rejected in the logic phase. In practice such a
+  line almost always arrives inside a code fence, which *is* caught, so exposure is small — and tightening the
+  rule risks false positives on ordinary prose ("Return the indices, not the values."). Tightening it changes
+  §6.4, which needs approval (§1.4), so it is left as specified. `test_known_gap_colonless_code_lines_are_not_caught`
+  pins the current behaviour so the gap stays visible. **Decision needed at the Day 1 gate:** leave as-is, or add
+  the narrow patterns `^\s*return\s*[\[\(]` and `^\s*import\s+\w+\s*$`.
 
 ## Open blockers
 

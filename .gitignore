@@ -30,3 +30,6 @@ Thumbs.db
 .idea/
 .vscode/
 tools/
+
+# python / uv
+orchestrator/.venv/
