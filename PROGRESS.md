@@ -32,8 +32,8 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | D2-T1 Code phase in graph | ✅ DONE | `execute_code`, `code_tutor`, `verify_code`, `finish`, `redact.py`, `view.py`; `code:`/`--flow`/`--tle` in the harness. Verify: `--flow` → full F1→F5 pass; `--tle` → F4b pass; `pytest` → **62/62**. |
 | D2-T2 PostgresSaver + FastAPI | ✅ DONE | `checkpointer.py` (trap 4 settings), `main.py` (§5.3 endpoints, 401/404/409/422), `tracing.py`. Verify: `bash orchestrator/verify_api.sh` → **22 passed, 0 failed**, including the kill-and-restart persistence proof. `pytest` → **79/79**. |
 | D2-T3 Rust gateway | ✅ DONE | Axum 0.8, mocked auth, sha256 thread derivation, 120 s reqwest timeout, CORS, trace propagation. Verify: `bash gateway/verify.sh` → **20 passed, 0 failed**; `cargo test` → **6/6**. Needed a three-layer Windows toolchain fix — see below. |
-| D2-T4 Next.js UI | ⬜ | |
-| 🚦 Day 2 gate | ⬜ | |
+| D2-T4 Next.js UI | ✅ DONE | Next 16.3.5 / React 19 / Tailwind v4 / Monaco. Header + stepper, problem pane with accepted-logic tab, textarea → Monaco, floating Socratic chat, test drawer, **Under the hood**, busy bars with live seconds. Verify: full §10 flow driven in a real browser — F1 FAIL → F2 chat → refresh resumes → F3 PASS/unlock → F4 RUNTIME_ERROR → F5 ACCEPTED 5/5 → DONE. `tsc --noEmit` clean, `next build` clean. |
+| 🚦 Day 2 gate | 🟡 ready for the human | All four D2 tasks verified. `demo/SCRIPT.md` has the click-by-click run. Needs three clean browser runs by the human. |
 | D3-T1 Stretch | ⬜ | LLM judge; containerising app services (LiteLLM already containerised) |
 | D3-T2 Demo tooling | ⬜ | |
 | D3-T3 Cold start test | ⬜ | |

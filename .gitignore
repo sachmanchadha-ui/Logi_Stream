@@ -34,3 +34,6 @@ tools/
 # python / uv
 orchestrator/.venv/
 gateway/target/
+web/.next/
+web/node_modules/
+web/.env.local
