@@ -29,3 +29,4 @@ demo/logs/*.log
 Thumbs.db
 .idea/
 .vscode/
+tools/

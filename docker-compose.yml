@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: logistream-postgres
+    environment:
+      POSTGRES_DB: logistream
+      POSTGRES_USER: logistream
+      POSTGRES_PASSWORD: logistream
+    ports:
+      - "5432:5432"
+    volumes:
+      - logistream-pgdata:/var/lib/postgresql/data
+      # runs only on an empty volume; `docker compose down -v` re-runs it (CLAUDE.md trap 10)
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logistream -d logistream"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  logistream-pgdata:
