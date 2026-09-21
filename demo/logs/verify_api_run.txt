@@ -1,0 +1,47 @@
+=== D2-T2 verify: orchestrator API ===
+  thread: verify-1790026467
+
+starting uvicorn (log: demo/logs/orchestrator-verify.log)
+[auth]
+  PASS  GET /sessions/... without a token -> 401
+  PASS  GET /sessions/... with a wrong token -> 401
+  PASS  GET /health needs no token -> 200
+
+[session lifecycle]
+  PASS  start -> 200 (phase=LOGIC status=LOGIC_WRITE)
+  PASS  last_eval is null before any evaluation
+  PASS  last_execution is null before any run
+
+[event validation]
+  PASS  code event in phase LOGIC -> 409
+  PASS  whitespace-only text -> 422
+  PASS  event on an unknown session -> 404
+
+[conversation: F1 then F2]
+  PASS  F1 -> verdict FAIL (misconception=nested-loop)
+  PASS  F2 chat -> 200
+  (4 messages in the transcript before the restart)
+
+[persistence: kill uvicorn and restart it]
+  killing the process holding port 8001 (pid 27504)
+  PASS  uvicorn is down
+  restarting uvicorn...
+  PASS  uvicorn is back up
+  PASS  conversation survived the restart (4 messages, verdict=FAIL)
+
+[F3: pass the gate]
+  PASS  F3 -> PASS, phase=CODE, approach=lookup-single-pass
+  PASS  accepted_logic is populated
+  PASS  logic event in phase CODE -> 409
+
+[reset]
+  PASS  reset -> 200
+  PASS  session is gone after reset -> 404
+  PASS  start after reset -> a fresh LOGIC session
+
+[tracing]
+  PASS  X-Trace-Id is echoed back (x-trace-id: probe-trace-123)
+  PASS  X-Trace-Id appears in the orchestrator log
+
+=== D2-T2 VERIFY: 22 passed, 0 failed ===
+EXIT=0

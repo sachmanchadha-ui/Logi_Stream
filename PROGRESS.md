@@ -15,7 +15,7 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | Java | **Temurin 21.0.12.1 LTS** in `tools/jdk21`, pinned via `scripts/env.sh`. Machine default (26.0.2) untouched |
 | Maven | **3.9.16** in `tools/maven` |
 | Rust / cargo | **1.98.1** (rustup, per-user `~/.cargo`) |
-| MSVC linker | present (Visual Studio 18) — `cargo` can link on this box |
+| MSVC linker | **absent** — see the D2-T3 toolchain note. Day 1's "present" reading was wrong: it matched Git Bash's coreutils `link.exe`, not MSVC's |
 | Package managers | `winget` 1.29.290, `choco` 2.7.3, `uv` 0.11.32 |
 | `jq` | **not installed** — shell scripts parse JSON with `python` |
 
@@ -29,8 +29,8 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | D1-T3 Java domain service | ✅ DONE | Spring Boot 3.5.16 / Java 21, JdbcTemplate, internal-token filter, trace-id filter, `Sandbox` seam with local + Judge0 implementations. Verify: `bash domain/verify.sh` → **12 passed, 0 failed, 0 skipped**; `mvn test` → **13/13**. |
 | D1-T4 Python orchestrator core | ✅ DONE | uv venv on Python 3.11.15; verifier, LLM client, domain client, verdict cache, LOGIC-phase nodes, graph on `MemorySaver`, CLI harness. Verify: `uv run pytest` → **49/49**; `cli_harness.py --fixtures` → **6/6** (table below). |
 | 🚦 Day 1 gate | ✅ **REACHED** | Reported to the human. |
-| D2-T1 Code phase in graph | ⬜ next | `execute_code`, `code_tutor`, `verify_code`, `finish`; hidden-test stripping; `code:` in the harness |
-| D2-T2 PostgresSaver + FastAPI | ⬜ | |
+| D2-T1 Code phase in graph | ✅ DONE | `execute_code`, `code_tutor`, `verify_code`, `finish`, `redact.py`, `view.py`; `code:`/`--flow`/`--tle` in the harness. Verify: `--flow` → full F1→F5 pass; `--tle` → F4b pass; `pytest` → **62/62**. |
+| D2-T2 PostgresSaver + FastAPI | ✅ DONE | `checkpointer.py` (trap 4 settings), `main.py` (§5.3 endpoints, 401/404/409/422), `tracing.py`. Verify: `bash orchestrator/verify_api.sh` → **22 passed, 0 failed**, including the kill-and-restart persistence proof. `pytest` → **79/79**. |
 | D2-T3 Rust gateway | ⬜ | Unblocked (cargo 1.98.1 + MSVC linker present) |
 | D2-T4 Next.js UI | ⬜ | |
 | 🚦 Day 2 gate | ⬜ | |

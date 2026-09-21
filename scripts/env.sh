@@ -27,5 +27,22 @@ if [ -d "$_ls_cargo/bin" ]; then
 fi
 unset _ls_cargo
 
+# A very old MinGW (aclocal-1.4 era) sits on the system PATH at G:\MINGWin.
+# Its dlltool.exe shadows the one rustup ships and fails every windows-sys crate
+# with "Invalid bfd target", so the gateway cannot link while it is visible.
+# Dropped for this repo's shells only; the system PATH is untouched.
+PATH="$(printf '%s' "$PATH" | tr ':' '
+' | grep -v -i '^/g/MINGW/bin$' | paste -sd ':' -)"
+
+# rustc looks up dlltool.exe on PATH and does NOT fall back to the copy rustup
+# ships, so the gnu toolchain's self-contained bin directory has to be visible
+# or every windows-sys crate fails with "error calling dlltool".
+_ls_selfcontained="${CARGO_HOME:-$HOME/.cargo}"
+_ls_selfcontained="$(dirname "$_ls_selfcontained")/.rustup/toolchains/stable-x86_64-pc-windows-gnu/lib/rustlib/x86_64-pc-windows-gnu/bin/self-contained"
+if [ -d "$_ls_selfcontained" ]; then
+  PATH="$_ls_selfcontained:$PATH"
+fi
+unset _ls_selfcontained
+
 export PATH
 unset _ls_root

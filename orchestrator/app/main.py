@@ -1,0 +1,203 @@
+"""Orchestrator HTTP API (CLAUDE.md section 5.3).
+
+Internal service: only the Rust gateway talks to it, and every endpoint except
+/health demands X-Internal-Token.
+
+Sync endpoints (`def`, not `async def`) against the sync graph, exactly as
+section 6.5 specifies. FastAPI runs them in a threadpool, which is the right
+shape here anyway because a graph turn spends most of its time blocked on an
+LLM call.
+"""
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+from typing import Any
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from langgraph.types import Command
+from pydantic import BaseModel
+
+from app import config, domain_client, llm, tracing
+from app.checkpointer import build_checkpointer, close_checkpointer
+from app.graph import build_graph
+from app.state import initial_state
+from app.view import build_session_view
+
+log = logging.getLogger(__name__)
+
+_graph = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _graph
+    tracing.configure_logging()
+
+    checkpointer = build_checkpointer()
+    _graph = build_graph(checkpointer)
+
+    log.info("orchestrator ready: llm=%s domain=%s", llm.describe(), config.DOMAIN_URL)
+    yield
+    close_checkpointer()
+
+
+app = FastAPI(title="LogiStream orchestrator", lifespan=lifespan)
+
+
+# --------------------------------------------------------------------------
+# cross-cutting
+# --------------------------------------------------------------------------
+
+@app.middleware("http")
+async def trace_middleware(request: Request, call_next):
+    tid = tracing.set_trace_id(request.headers.get(tracing.HEADER))
+    response = await call_next(request)
+    response.headers[tracing.HEADER] = tid
+    return response
+
+
+def require_token(x_internal_token: str | None = Header(default=None)) -> None:
+    """Section 5.3: every endpoint except /health requires the internal token."""
+    if x_internal_token != config.INTERNAL_TOKEN:
+        log.warning("rejected request: missing or invalid %s", "X-Internal-Token")
+        raise HTTPException(status_code=401, detail="missing or invalid X-Internal-Token")
+
+
+def graph():
+    if _graph is None:                           # pragma: no cover - lifespan guarantees it
+        raise HTTPException(status_code=503, detail="graph not ready")
+    return _graph
+
+
+# --------------------------------------------------------------------------
+# request bodies
+# --------------------------------------------------------------------------
+
+class StartBody(BaseModel):
+    problem_id: str
+    user_id: str | None = None
+
+
+class EventBody(BaseModel):
+    type: str
+    text: str
+
+
+# --------------------------------------------------------------------------
+# endpoints
+# --------------------------------------------------------------------------
+
+@app.get("/health")
+def health() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "llm": llm.describe(),
+        "domain_healthy": domain_client.health(),
+    }
+
+
+@app.post("/sessions/{thread_id}/start", dependencies=[Depends(require_token)])
+def start(thread_id: str, body: StartBody) -> dict[str, Any]:
+    """Resume an existing session, or begin a new one (section 5.3).
+
+    Resuming is the default on purpose: a browser refresh must land back in the
+    same conversation, and that is the checkpointing story the demo shows off.
+    """
+    g = graph()
+    cfg = {"configurable": {"thread_id": thread_id}}
+
+    snapshot = g.get_state(cfg)
+    if snapshot.values:
+        log.info("start: resuming existing session thread=%s phase=%s",
+                 thread_id, snapshot.values.get("phase"))
+        return _view(g, cfg, thread_id)
+
+    user_id = body.user_id or "demo-user"
+    log.info("start: new session thread=%s problem=%s user=%s",
+             thread_id, body.problem_id, user_id)
+    # runs until the interrupt in await_input
+    g.invoke(initial_state(body.problem_id, user_id, thread_id), cfg)
+    return _view(g, cfg, thread_id)
+
+
+@app.post("/sessions/{thread_id}/event", dependencies=[Depends(require_token)])
+def event(thread_id: str, body: EventBody) -> dict[str, Any]:
+    g = graph()
+    cfg = {"configurable": {"thread_id": thread_id}}
+
+    snapshot = g.get_state(cfg)
+    if not snapshot.values:
+        raise HTTPException(status_code=404, detail="no such session; call start first")
+
+    _validate_event(body, snapshot.values)
+
+    log.info("event: thread=%s type=%s phase=%s chars=%d",
+             thread_id, body.type, snapshot.values.get("phase"), len(body.text))
+
+    g.invoke(Command(resume={"type": body.type, "text": body.text}), cfg)
+    return _view(g, cfg, thread_id)
+
+
+@app.post("/sessions/{thread_id}/reset", dependencies=[Depends(require_token)])
+def reset(thread_id: str) -> dict[str, Any]:
+    g = graph()
+    log.info("reset: deleting checkpoints for thread=%s", thread_id)
+    g.checkpointer.delete_thread(thread_id)
+    return {"ok": True}
+
+
+@app.get("/sessions/{thread_id}", dependencies=[Depends(require_token)])
+def get_session(thread_id: str) -> dict[str, Any]:
+    g = graph()
+    cfg = {"configurable": {"thread_id": thread_id}}
+    if not g.get_state(cfg).values:
+        raise HTTPException(status_code=404, detail="no such session")
+    return _view(g, cfg, thread_id)
+
+
+# --------------------------------------------------------------------------
+# helpers
+# --------------------------------------------------------------------------
+
+def _view(g, cfg: dict[str, Any], thread_id: str) -> dict[str, Any]:
+    # section 5.3: build the view from get_state, never from invoke's return value
+    return build_session_view(
+        g.get_state(cfg).values,
+        thread_id=thread_id,
+        trace_id=tracing.get_trace_id(),
+    )
+
+
+def _validate_event(body: EventBody, values: dict[str, Any]) -> None:
+    """Section 5.3 event validation: 422 for empty text, 409 for the wrong phase."""
+    if not body.text or not body.text.strip():
+        raise HTTPException(status_code=422, detail="text must not be empty")
+
+    phase = values.get("phase", "LOGIC")
+
+    if phase == "DONE":
+        raise HTTPException(
+            status_code=409,
+            detail="this session is finished; reset it to start again",
+        )
+
+    allowed = {
+        "LOGIC": {"logic", "chat"},
+        "CODE": {"code", "chat"},
+    }.get(phase, set())
+
+    if body.type not in allowed:
+        raise HTTPException(
+            status_code=409,
+            detail=(f"event type '{body.type}' is not allowed in phase {phase}; "
+                    f"allowed here: {', '.join(sorted(allowed))}"),
+        )
+
+
+@app.exception_handler(Exception)
+async def unhandled(request: Request, exc: Exception) -> Response:
+    """Never leak a stack trace to the caller, but always log one."""
+    log.exception("unhandled error on %s %s", request.method, request.url.path)
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
