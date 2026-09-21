@@ -1,0 +1,31 @@
+# secrets
+.env
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# java
+domain/target/
+*.class
+
+# rust
+gateway/target/
+
+# node
+node_modules/
+web/.next/
+web/out/
+.next/
+
+# logs / runtime
+demo/logs/*.log
+*.pid
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
