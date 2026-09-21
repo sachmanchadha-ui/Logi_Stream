@@ -121,7 +121,7 @@ them Rust's fault, all fixed without admin rights:
 | # | Symptom | Cause | Fix |
 |---|---|---|---|
 | 1 | `link: extra operand ...` | No Visual Studio C++ toolset exists on this machine. Rust's msvc target shells out to `link.exe`, which on Git Bash resolves to **coreutils' `/usr/bin/link.exe`** | Switched to `x86_64-pc-windows-gnu`, pinned in `gateway/rust-toolchain.toml` |
-| 2 | `dlltool: Invalid bfd target` | An ancient MinGW at `G:\MINGWin` (ships `aclocal-1.4`) sits on the system PATH and shadowed rustup's tools | `scripts/env.sh` filters `/g/MINGW/bin` out of PATH **for this repo's shells only**; the system PATH is untouched |
+| 2 | `dlltool: Invalid bfd target` | An ancient MinGW at `G:\MINGW\bin` (ships `aclocal-1.4`) sits on the system PATH and shadowed rustup's tools | `scripts/env.sh` filters `/g/MINGW/bin` out of PATH **for this repo's shells only**; the system PATH is untouched |
 | 3 | `dlltool.exe: CreateProcess` | rustup's self-contained set has `dlltool`/`ld`/`gcc` but **no assembler**, which `dlltool` itself invokes | Portable MinGW-w64 (winlibs UCRT) into `tools/mingw64`, added to `scripts/bootstrap_toolchain.sh` |
 
 **Correction to the Day 1 environment note.** Day 1 recorded "MSVC linker present (Visual Studio 18)".
