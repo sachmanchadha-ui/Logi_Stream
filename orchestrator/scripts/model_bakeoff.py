@@ -95,9 +95,16 @@ def main() -> int:
     ap.add_argument("--base-url", default="https://openrouter.ai/api/v1")
     args = ap.parse_args()
 
-    key = os.environ.get("OPENROUTER_API_KEY")
+    # .env now carries three numbered keys for LiteLLM round-robin; this script
+    # talks to OpenRouter directly, so any one of them will do.
+    key = (
+        os.environ.get("OPENROUTER_API_KEY")
+        or os.environ.get("OPENROUTER_API_KEY_1")
+        or os.environ.get("OPENROUTER_API_KEY_2")
+        or os.environ.get("OPENROUTER_API_KEY_3")
+    )
     if not key:
-        print("STOP: OPENROUTER_API_KEY is not set (source .env first)")
+        print("STOP: no OPENROUTER_API_KEY[_1..3] is set (source .env first)")
         return 2
 
     from openai import OpenAI

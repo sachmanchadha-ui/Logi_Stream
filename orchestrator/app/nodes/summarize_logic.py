@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app import config, llm
+from app import cache, config, domain_client, llm
 from app.prompts.summarizer import SUMMARIZER_SYSTEM, build_summarizer_user
 from app.state import SessionState, message
 
@@ -34,6 +34,33 @@ def summarize_logic(state: SessionState) -> dict[str, Any]:
         if m.get("role") == "student" and m.get("kind") == "logic" and m.get("text") != user_logic
     ]
 
+    # Cached like the verdict (Day 3). Without this, F3 -- the "editor unlocks"
+    # beat -- still cost ~30s on a verdict cache hit, because this node made its
+    # own LLM call. The summary depends only on the accepted text, so it caches
+    # on exactly the same terms.
+    problem_id = state["problem_id"]
+    rubric_version = 1
+    try:
+        rubric_version = domain_client.get_problem_context(problem_id).get(
+            "rubric_version", 1
+        )
+    except Exception:                            # noqa: BLE001 - cache key only
+        pass
+
+    key = cache.cache_key(problem_id, rubric_version, user_logic, kind="summary")
+    cached = cache.get(key)
+    if cached is not None:
+        log.info("summarize_logic CACHE HIT key=%s", key[:12])
+        accepted = cached.get("final_logic_text") or user_logic
+        return {
+            "logic_summary": cached,
+            "accepted_logic": accepted,
+            "phase": "CODE",
+            "status": "CODE_WRITE",
+            "messages": [message("system", "info", UNLOCK_MESSAGE)],
+            "node_path": list(state.get("node_path") or []) + ["summarize_logic"],
+        }
+
     try:
         parsed = llm.complete_json(
             model=config.LLM_MODEL_TUTOR,
@@ -45,6 +72,7 @@ def summarize_logic(state: SessionState) -> dict[str, Any]:
         summary = parsed.model_dump()
         if not summary.get("final_logic_text"):
             summary["final_logic_text"] = user_logic
+        cache.put(key, problem_id, summary)
     except Exception as e:                       # noqa: BLE001
         # Section 6.3 is explicit: on any failure, fall back to the student's own
         # words. The student has already earned the pass; a summariser hiccup

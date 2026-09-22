@@ -20,17 +20,22 @@ services:
 
   # LiteLLM proxy: the orchestrator's only LLM endpoint.
   #
-  # It gives us internal model names decoupled from the provider, and automatic
-  # failover between two free models -- which matters because OpenRouter's free
-  # tier throws 429 under contention and a rate limit on stage is unrecoverable.
+  # It gives us internal model names decoupled from the provider, plus two kinds
+  # of resilience against OpenRouter's free tier: round-robin across three API
+  # keys (so a per-key rate limit only costs one turn) and a model fallback (so a
+  # limit on the model itself still answers). A 429 on stage is unrecoverable.
   # See litellm_config.yaml for the routing and the bake-off that chose the models.
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     container_name: logistream-litellm
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set - source .env first}
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-logistream-dev}
+      # one key per line: YAML list items cannot share a line, and merging two
+      # onto one silently produced a single malformed entry rather than an error
+      - OPENROUTER_API_KEY_1=${OPENROUTER_API_KEY_1:?set OPENROUTER_API_KEY_1 in .env}
+      - OPENROUTER_API_KEY_2=${OPENROUTER_API_KEY_2:-${OPENROUTER_API_KEY_1}}
+      - OPENROUTER_API_KEY_3=${OPENROUTER_API_KEY_3:-${OPENROUTER_API_KEY_1}}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-logistream-dev}
     ports:
       - "4000:4000"
     volumes:

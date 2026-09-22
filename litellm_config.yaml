@@ -7,10 +7,15 @@
 #      is a change to this file and nothing else -- which is exactly the seam
 #      CLAUDE.md section 3 promised when it deferred LiteLLM.
 #
-#   2. FAILOVER. We are on OpenRouter's free tier, which throws 429 constantly
-#      under contention -- measured during the D1-T4 model bake-off. A 429 during
-#      the Thursday demo is unrecoverable by hand, so each internal name has a
-#      backup model and LiteLLM fails over automatically.
+#   2. TWO KINDS OF FAILOVER. OpenRouter's free tier throws 429 constantly, and
+#      a rate limit during the Thursday demo is unrecoverable by hand.
+#        * Round-robin across THREE API keys. Free-tier limits are per key, so
+#          three keys means roughly three times the headroom and a limit on one
+#          key costs at most one turn.
+#        * A model fallback underneath. If qwen is limited for every key, the
+#          request still gets answered by nemotron instead of failing.
+#      Keys alone do not cover a model-wide limit; a fallback alone does not
+#      cover per-key limits. Both are needed.
 #
 # Model choice is evidence-based, not a guess. From
 # `uv run python orchestrator/scripts/model_bakeoff.py` on 2026-09-21, scored
@@ -25,48 +30,71 @@
 # no longer exists on OpenRouter at all (CLAUDE.md trap 12, exactly as warned).
 
 model_list:
-  # ---- evaluator: judges the student's Hinglish logic, must hold a JSON contract
+  # ---------------------------------------------------------------- evaluator
+  # Judges the student's Hinglish logic and must hold a JSON contract.
+  # Three deployments share one model_name, so the router load-balances them.
   - model_name: logistream-evaluator
     litellm_params:
       model: openrouter/qwen/qwen3.8-27b:free
-      api_key: os.environ/OPENROUTER_API_KEY
+      api_key: os.environ/OPENROUTER_API_KEY_1
       api_base: https://openrouter.ai/api/v1
       temperature: 0
-    model_info:
-      mode: chat
-      notes: "primary - 4/4 on the fixture bake-off"
 
+  - model_name: logistream-evaluator
+    litellm_params:
+      model: openrouter/qwen/qwen3.8-27b:free
+      api_key: os.environ/OPENROUTER_API_KEY_2
+      api_base: https://openrouter.ai/api/v1
+      temperature: 0
+
+  - model_name: logistream-evaluator
+    litellm_params:
+      model: openrouter/qwen/qwen3.8-27b:free
+      api_key: os.environ/OPENROUTER_API_KEY_3
+      api_base: https://openrouter.ai/api/v1
+      temperature: 0
+
+  # last resort when qwen is limited on every key
   - model_name: logistream-evaluator-backup
     litellm_params:
       model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
-      api_key: os.environ/OPENROUTER_API_KEY
+      api_key: os.environ/OPENROUTER_API_KEY_1
       api_base: https://openrouter.ai/api/v1
       temperature: 0
-    model_info:
-      mode: chat
-      notes: "failover - faster but weaker JSON adherence"
 
-  # ---- tutor: writes the Socratic turn; every output is verified downstream
+  # -------------------------------------------------------------------- tutor
+  # Writes the Socratic turn. Every output is machine-verified downstream, so a
+  # weaker fallback model is safe here: it cannot leak the answer.
   - model_name: logistream-tutor
     litellm_params:
       model: openrouter/qwen/qwen3.8-27b:free
-      api_key: os.environ/OPENROUTER_API_KEY
+      api_key: os.environ/OPENROUTER_API_KEY_1
       api_base: https://openrouter.ai/api/v1
-    model_info:
-      mode: chat
+
+  - model_name: logistream-tutor
+    litellm_params:
+      model: openrouter/qwen/qwen3.8-27b:free
+      api_key: os.environ/OPENROUTER_API_KEY_2
+      api_base: https://openrouter.ai/api/v1
+
+  - model_name: logistream-tutor
+    litellm_params:
+      model: openrouter/qwen/qwen3.8-27b:free
+      api_key: os.environ/OPENROUTER_API_KEY_3
+      api_base: https://openrouter.ai/api/v1
 
   - model_name: logistream-tutor-backup
     litellm_params:
       model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
-      api_key: os.environ/OPENROUTER_API_KEY
+      api_key: os.environ/OPENROUTER_API_KEY_1
       api_base: https://openrouter.ai/api/v1
-    model_info:
-      mode: chat
 
 router_settings:
-  # free-tier 429s are bursty, so retry before giving up on a deployment
-  num_retries: 2
+  routing_strategy: simple-shuffle   # spreads load across the three keys
+  num_retries: 3
   retry_after: 5
+  # A free-tier turn has been measured past 90s. A shorter timeout here would
+  # cut off a slow but perfectly good answer (CLAUDE.md trap 8).
   timeout: 120
   allowed_fails: 3
   cooldown_time: 30
