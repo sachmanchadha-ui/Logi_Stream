@@ -92,7 +92,7 @@ export function WorkPane({
           <button
             onClick={() => onSubmitLogic(logic.trim())}
             disabled={busy || !logic.trim()}
-            className="rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[#08101f] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--on-accent)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           >
             Submit logic
           </button>
@@ -110,7 +110,7 @@ export function WorkPane({
         <MonacoEditor
           height="100%"
           defaultLanguage="python"
-          theme="vs-dark"
+          theme="vs"
           value={code}
           onChange={(v) => setCode(v ?? "")}
           options={{
@@ -128,7 +128,7 @@ export function WorkPane({
         <button
           onClick={() => onSubmitCode(code)}
           disabled={busy || done || !code.trim()}
-          className="rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[#08101f] disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--on-accent)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Run &amp; submit
         </button>

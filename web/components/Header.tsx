@@ -55,7 +55,7 @@ export function Header({
                 aria-current={state === "active" ? "step" : undefined}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   state === "active"
-                    ? "bg-[var(--accent)] text-[#08101f]"
+                    ? "bg-[var(--accent)] text-[var(--on-accent)]"
                     : state === "done"
                       ? "bg-[var(--surface-2)] text-[var(--accent)]"
                       : "bg-[var(--surface-2)] text-[var(--muted)]"

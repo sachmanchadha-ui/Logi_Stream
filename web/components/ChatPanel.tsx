@@ -50,7 +50,7 @@ export function ChatPanel({
       >
         Tutor
         {tutorCount > 0 && (
-          <span className="rounded-full bg-[var(--accent)] px-1.5 text-[10px] text-[#08101f]">
+          <span className="rounded-full bg-[var(--accent)] px-1.5 text-[10px] text-[var(--on-accent)]">
             {tutorCount}
           </span>
         )}
@@ -96,7 +96,7 @@ export function ChatPanel({
                   ? "bg-[var(--surface-2)]"
                   : m.role === "system"
                     ? "border border-[var(--border)] text-[var(--muted)]"
-                    : "bg-[var(--accent)] text-[#08101f]"
+                    : "bg-[var(--accent)] text-[var(--on-accent)]"
               }`}
             >
               {m.text}
@@ -134,7 +134,7 @@ export function ChatPanel({
         <button
           type="submit"
           disabled={busy || disabled || !draft.trim()}
-          className="rounded bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[#08101f] disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--on-accent)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Send
         </button>

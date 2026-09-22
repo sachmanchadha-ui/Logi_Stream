@@ -126,7 +126,7 @@ export default function Page() {
       <Header view={view} busy={isBusy} onReset={onReset} />
 
       {error && (
-        <div className="shrink-0 border-b border-[var(--fail)] bg-[#2a1416] px-5 py-2 text-xs text-[var(--fail)]">
+        <div className="shrink-0 border-b border-[var(--fail)] bg-[var(--fail-bg)] px-5 py-2 text-xs text-[var(--fail)]">
           {error}
           <button
             onClick={() => setError(null)}

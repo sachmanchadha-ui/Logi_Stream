@@ -1,34 +1,115 @@
 @import "tailwindcss";
 
-/* Dark mode is not a preference here: the demo is always dark, and Monaco is
-   configured to match. Fixing it removes one thing that can look wrong on a
-   projector. */
+/* ===========================================================================
+   LogiStream — Anthropic-inspired design system
+   ===========================================================================
+
+   THIS FILE IS THE ENTIRE THEME. Every colour in the UI resolves through the
+   tokens below, so the palette can be changed here without touching a single
+   component, and certainly without touching any React state, effect or fetch.
+
+   Tailwind v4: there is no tailwind.config.ts in this project and there does
+   not need to be one. v4 is CSS-first -- the `@theme inline` block below is the
+   config, and it is what makes `bg-surface`, `text-muted` etc. available as
+   real utilities.
+
+   LIGHT IS THE DEFAULT, AND IT IS DETERMINISTIC. Dark mode is opt-in via
+   <html data-theme="dark">, NOT via prefers-color-scheme. That is a deliberate
+   demo decision: a projector or a stranger's OS setting must not be able to
+   change what the audience sees mid-presentation.
+   =========================================================================== */
+
 :root {
-  --background: #0b0d12;
-  --surface: #12151d;
-  --surface-2: #171b25;
-  --border: #252b38;
-  --foreground: #e6e9ef;
-  --muted: #8b93a7;
-  --accent: #6aa9ff;
-  --pass: #4ade80;
-  --fail: #f87171;
-  --warn: #fbbf24;
+  color-scheme: light;
+
+  /* ---- surfaces -------------------------------------------------------- */
+  --background: #f4f3ee;   /* Pampas */
+  --surface: #faf9f6;      /* raised panels, slightly lighter than the page */
+  --surface-2: #ebe9e1;    /* recessed / hover / code wells */
+
+  /* ---- lines ----------------------------------------------------------- */
+  /* Cloudy (#b1ada1) is the spec'd border colour, but at full strength it is
+     heavy for 1px hairlines on Pampas. It is kept as --border-strong for
+     emphasis, with a softer tint used for ordinary rules. */
+  --border: #d6d2c6;
+  --border-strong: #b1ada1;  /* Cloudy */
+
+  /* ---- text ------------------------------------------------------------ */
+  --foreground: #1f1e1d;   /* dark charcoal */
+  /* NOT Cloudy: #b1ada1 on Pampas is ~1.6:1 and unreadable. This is ~5.1:1. */
+  --muted: #6b6760;
+
+  /* ---- accent ---------------------------------------------------------- */
+  --accent: #c15f3c;       /* Crail / coral */
+  --accent-hover: #a94f30;
+  --accent-soft: #f2e3dc;  /* tinted fill for subtle accent surfaces */
+  --on-accent: #fffaf7;    /* text sitting ON the accent colour */
+
+  /* ---- semantic -------------------------------------------------------- */
+  --pass: #3f7d5a;
+  --fail: #b3402e;
+  --warn: #9a6a17;
+  --fail-bg: #f8eae6;      /* error banner fill */
+
+  /* ---- typography ------------------------------------------------------ */
+  /* "Anthropic Serif" is not a webfont we can fetch, so this is the specified
+     fallback chain. Drop a licensed woff2 in and prepend it if you have one --
+     nothing else needs to change. */
+  --font-serif: "Anthropic Serif", Charter, "Bitstream Charter",
+    "Iowan Old Style", "Source Serif 4", Georgia, ui-serif, serif;
+  --font-ui: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-code: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* Dark: deep charcoal with a plum cast, warm off-white text.
+   Opt in with <html data-theme="dark"> -- see the note at the top. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #1a1719;
+  --surface: #221e21;
+  --surface-2: #2b2529;
+
+  --border: #3a3236;
+  --border-strong: #4d4448;
+
+  --foreground: #f0ebe4;   /* warm off-white */
+  --muted: #a69d97;
+
+  /* lifted coral: #c15f3c is too dark to read against a charcoal ground */
+  --accent: #d97757;
+  --accent-hover: #e08a6d;
+  --accent-soft: #33242220;
+  --on-accent: #241413;
+
+  --pass: #6fcf97;
+  --fail: #e98878;
+  --warn: #dfb35f;
+  --fail-bg: #35201d;
+}
+
+/* Expose the tokens to Tailwind as real utilities (bg-surface, text-muted,
+   border-subtle, ...). The existing components use bg-[var(--surface)] style
+   arbitrary values, which keep working unchanged; these are for new markup. */
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-border-subtle: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
   --color-pass: var(--pass);
   --color-fail: var(--fail);
   --color-warn: var(--warn);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --font-sans: var(--font-ui);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-code);
 }
 
 html,
@@ -39,13 +120,39 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  /* Serif for reading, as specified. Dense UI chrome and code opt back out
+     below -- a serif at 10px in a debug table is not a kindness. */
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.011em;
+}
+
+/* Controls, small labels and anything monospaced stay in their own families.
+   This is presentation only; no element is added, removed or re-ordered. */
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-ui);
+}
+
+code,
+pre,
+.font-mono {
+  font-family: var(--font-code);
 }
 
 /* the transcript and the problem pane both scroll; keep the bars unobtrusive */
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 @keyframes pulse-dot {
@@ -57,3 +164,18 @@ body {
 }
 .dot:nth-child(2) { animation-delay: 0.15s; }
 .dot:nth-child(3) { animation-delay: 0.3s; }
+
+/* A warm focus ring that matches the accent, replacing the browser default
+   blue. Keyboard-only, so mouse users see no change. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Monaco paints its own background from its theme; this stops a one-frame
+   flash of the wrong colour while the editor chunk loads. */
+.monaco-editor,
+.monaco-editor-background {
+  background-color: var(--surface) !important;
+}
