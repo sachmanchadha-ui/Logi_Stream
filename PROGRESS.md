@@ -34,11 +34,11 @@ Task log, decisions and deviations. Updated after every task (see CLAUDE.md §1)
 | D2-T3 Rust gateway | ✅ DONE | Axum 0.8, mocked auth, sha256 thread derivation, 120 s reqwest timeout, CORS, trace propagation. Verify: `bash gateway/verify.sh` → **20 passed, 0 failed**; `cargo test` → **6/6**. Needed a three-layer Windows toolchain fix — see below. |
 | D2-T4 Next.js UI | ✅ DONE | Next 16.3.5 / React 19 / Tailwind v4 / Monaco. Header + stepper, problem pane with accepted-logic tab, textarea → Monaco, floating Socratic chat, test drawer, **Under the hood**, busy bars with live seconds. Verify: full §10 flow driven in a real browser — F1 FAIL → F2 chat → refresh resumes → F3 PASS/unlock → F4 RUNTIME_ERROR → F5 ACCEPTED 5/5 → DONE. `tsc --noEmit` clean, `next build` clean. |
 | 🚦 Day 2 gate | 🟡 ready for the human | All four D2 tasks verified. `demo/SCRIPT.md` has the click-by-click run. Needs three clean browser runs by the human. |
-| D3-T1 Stretch | ⬜ | LLM judge; containerising app services (LiteLLM already containerised) |
-| D3-T2 Demo tooling | ⬜ | |
-| D3-T3 Cold start test | ⬜ | |
-| D3-T4 Pre-warm | ⬜ | |
-| D3-T5 Rehearsal support | ⬜ | |
+| D3-T1 Stretch | ⛔ SKIPPED (human decision, 2026-09-22) | The Day 2 gate's three browser runs had not been done, and §9 gates the stretch on them. Also: the LLM judge adds a third call per turn on a tier already returning 429, making the latency risk worse. Time went to hardening instead. |
+| D3-T2 Demo tooling | ✅ DONE | `start.sh` (ordered, idempotent, starts Docker Desktop), `stop.sh` (`--all`, kills process trees, no `--volumes` by design), `healthcheck.sh` (11 checks; live LLM/exec opt-in), `prewarm.py`, `DEVIATIONS.md`, `SCRIPT.md`. Verify: healthcheck → **READY, 11 passed**. |
+| D3-T3 Cold start test | ✅ DONE | `stop.sh --all` → `docker compose down -v` → `start.sh`. **Green from zero in 53 s.** Seed re-ran, sandbox ACCEPTED 5/5, cache correctly empty. |
+| D3-T4 Pre-warm | ✅ DONE | Warms **both** cache kinds. Verify: `prewarm.py --check` → **all four fixtures served from cache**. Timings below. |
+| D3-T5 Rehearsal support | ✅ DONE | `demo/rehearse.sh` drives F1→F5 through the gateway and times each beat; `demo/THURSDAY.md` is the morning checklist; `demo/SCRIPT.md` the click-by-click. Verify: **REHEARSAL GREEN, 5 beats, 65 s total**. |
 
 ## D1-T4 fixture verdict table (the mini golden set)
 
@@ -127,6 +127,75 @@ them Rust's fault, all fixed without admin rights:
 **Correction to the Day 1 environment note.** Day 1 recorded "MSVC linker present (Visual Studio 18)".
 That was wrong: `command -v link.exe` matched Git Bash's coreutils `link.exe`. There is no MSVC
 C++ toolset installed. The table above is what is actually true.
+
+## Day 3 changes
+
+### Summariser cache (approved on Day 2 — the Risk #1 fix)
+
+§6.3 specified caching only the evaluator verdict. That left F3 — the *"editor unlocks"* beat —
+still costing ~30 s on a verdict cache hit, because `summarize_logic` made its own LLM call.
+Both are now cached. The kind is folded into the hash rather than added as a column, so this
+needed **no schema migration** the day before the demo, and a verdict key cannot be served as a
+summary. Six tests pin the namespacing.
+
+### LiteLLM: three keys **and** a fallback
+
+The working tree arrived with uncommitted edits adding three OpenRouter keys and round-robin —
+a good instinct, since free-tier limits are per key. Two problems were fixed:
+
+1. **`docker-compose.yml` was malformed.** Two YAML list items had been merged onto one line each
+   (`- KEY_1=... - KEY_2=...`), which YAML reads as one bogus string rather than raising an error.
+2. **The config had lost its safety settings** — master key, `drop_params`, the 120 s timeout
+   (a free-tier turn has been measured past 90 s), and the model fallback.
+
+**Keys and fallback are not alternatives, and this is not theoretical.** Measured on the morning
+of 2026-09-22: `qwen/qwen3.8-27b:free` returned **429 on all three keys simultaneously**, and the
+nemotron fallback answered. With three keys and no fallback, every one of those calls would have
+failed. Both layers are now in place.
+
+### Cold start (D3-T3)
+
+| Step | Time |
+|---|---|
+| containers (postgres 3 s, litellm 19 s) | 22 s |
+| java → python → rust → web | ~7 s |
+| **total, from a wiped volume** | **53 s** |
+
+### Pre-warm results (D3-T4) — the summariser cache paying off
+
+| Fixture | Cold | Warm | Note |
+|---|---|---|---|
+| F1 | 41.7 s | **11.4 s** | verdict cached; the tutor reply is still live, by design |
+| F6 | 36.7 s | **12.3 s** | same |
+| **F3** | 16.2 s | **2.5 s** | verdict **and** summary cached |
+| F3b | 27.4 s | **2.5 s** | verdict and summary cached |
+
+F3 is the one that proves the Day 3 change. It triggers `summarize_logic`, and before the
+summariser cache a verdict-cache hit on F3 still cost **30.7 s**. It is now 2.5 s — the same as
+F3b, which is what "cached" should look like.
+
+**F1 and F6 stay slow on purpose.** Their verdicts are cached, but the tutor's reply is generated
+fresh and verified every time. Caching a tutor turn would mean shipping text that had not been
+through the verifier for *this* conversation, which is the one thing the product must not do.
+
+Also worth recording: these verdicts were produced by the **fallback** model (qwen was 429 on all
+three keys at the time) and it still got all four right, including `sort-two-pointer` for F3b.
+
+### Scripted rehearsal, post-prewarm (D3-T5)
+
+`bash demo/rehearse.sh` — same path the browser takes, port 8000 only.
+
+| Beat | Day 2 | Now | |
+|---|---|---|---|
+| F1 logic → FAIL | 14.1 s | **10 s** | verdict cached; tutor reply live |
+| F2 chat | 22.7 s | **22 s** | tutor live, and the verifier regenerated once |
+| F3 logic → PASS, unlock | 25.4 s | **1 s** | verdict + summary cached |
+| F4 code → RUNTIME_ERROR | 67.6 s | **10 s** | execution local; code tutor live |
+| F5 code → ACCEPTED, DONE | 0.8 s | **4 s** | execution only, no LLM |
+| **total** | **130.5 s** | **65 s** | |
+
+`regen=1` on F2 is the verifier rejecting a tutor draft and forcing a regeneration — it happens
+often enough to be worth pointing at on stage.
 
 ## Findings for the human
 
