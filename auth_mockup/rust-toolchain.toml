@@ -1,0 +1,7 @@
+# Pinned to the GNU toolchain, not MSVC, exactly as /gateway is.
+# There is no Visual Studio C++ toolset on this machine, so the msvc target
+# cannot link: rustc invokes link.exe, which on Git Bash resolves to coreutils'
+# link.exe. `source scripts/env.sh` from the repo root also puts the portable
+# MinGW-w64 in tools/ on PATH, which supplies the assembler dlltool needs.
+[toolchain]
+channel = "stable-x86_64-pc-windows-gnu"

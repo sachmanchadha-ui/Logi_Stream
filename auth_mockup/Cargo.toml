@@ -1,0 +1,31 @@
+[package]
+name = "logistream-auth-mockup"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "Isolated Google OAuth 2.0 proof-of-concept. Not part of the LogiStream demo path."
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+
+# oauth2 5.x is a redesign of the 4.x API: the client is a typed builder and
+# request_async() takes an AsyncHttpClient.
+oauth2 = "5.0"
+
+# PINNED TO 0.12 ON PURPOSE. oauth2 5.0 depends on reqwest ^0.12, and its
+# AsyncHttpClient impl is for THAT reqwest's Client. Asking for "0.13" here
+# compiles two copies of reqwest and the client we build no longer satisfies
+# the trait -- which surfaces as an inscrutable "trait bound not satisfied"
+# rather than a version error.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dotenvy = "0.15"
+tower-http = { version = "0.6", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+opt-level = 1
